@@ -6,7 +6,10 @@
 
 -record(interface, {name, ip}).
 
-init(_) -> {ok, []}.
+init(_) ->
+  %Make sure if we're exiting due to a shutdown we trap it, so terminate is called.
+  process_flag(trap_exit, true),
+  {ok, []}.
 
 handle_call({add_interface, Ip}, _, State) ->
   case damocles_lib:ensure_local_interface_ip4(Ip) of
@@ -22,7 +25,7 @@ handle_info(_, State) -> {noreply, State}.
 
 code_change(_, _, State) -> {ok, State}.
 
-terminate(_, State) -> 
+terminate(Reason, State) -> 
   %Attempts to tear down each interface we've created
   _ = rpc:pmap({damocles_lib, teardown_local_interface_ip4}, [], [Name || #interface{name = Name}<- State]), 
   {ok, []}.

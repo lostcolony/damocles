@@ -8,5 +8,5 @@ start_link() ->
 	supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 init([]) ->
-	Procs = [],
+	Procs = [{damocles, {damocles, start_link, []}, transient, 5000, worker, [damocles_server]}],
 	{ok, {{one_for_one, 1, 5}, Procs}}.
