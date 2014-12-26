@@ -5,10 +5,13 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, code_change/3, terminate/2]).
 
 -record(state, {interfaces = ordsets:new()}).
--record(interface, {name, ip}).
+-record(interface, {name, ip, transient=true}).
 
 init(_) ->
-  %Make sure if we're exiting due to a shutdown we trap it, so terminate is called.
+  %If we can't create traffic control, die. Die hard. With a vengeance. 
+  ok = damocles_lib:initialize_traffic_control(), 
+
+  %At this point make sure if we're exiting due to a shutdown we trap it, so terminate is called, and we (attempt to) undo our system manipulations.
   process_flag(trap_exit, true),
   {ok, #state{}}.
 
@@ -24,7 +27,7 @@ handle_call({ensure_interface, IpOrAdapter}, _, State) ->
     false -> {reply, false, State};
     {Ip, Interface} -> 
       OldInterfaces = State#state.interfaces, 
-      {reply, Interface, State#state{interfaces = ordsets:add_element(#interface{name = Interface, ip = Ip}, OldInterfaces)}}
+      {reply, Interface, State#state{interfaces = ordsets:add_element(#interface{name = Interface, ip = Ip, transient = false}, OldInterfaces)}}
   end;
 handle_call(_,_, State) -> {reply, ok, State}.
 
@@ -37,5 +40,6 @@ code_change(_, _, State) -> {ok, State}.
 
 terminate(_Reason, State) -> 
   %Attempts to tear down each interface we've created, in parallel
-  _ = rpc:pmap({damocles_lib, teardown_local_interface_ip4}, [], [Name || #interface{name = Name}<- ordsets:to_list(State#state.interfaces)]), 
+  _ = rpc:pmap({damocles_lib, teardown_local_interface_ip4}, [], [Name || #interface{name = Name, transient = true}<- ordsets:to_list(State#state.interfaces)]), 
+  _ = damocles_lib:teardown_traffic_control(),
   {ok, []}.

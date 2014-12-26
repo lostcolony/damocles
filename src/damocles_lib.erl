@@ -1,23 +1,23 @@
 -module(damocles_lib).
 
--export([add_local_interface_ip4/1, teardown_local_interface_ip4/1]).
--compile(export_all).
+-export([
+  initialize_traffic_control/0,
+  add_local_interface_ip4/1, 
+  ensure_local_interface_ip4/1, 
+  teardown_local_interface_ip4/1,
+  teardown_traffic_control/0, 
+  ping/2]).
 
--spec add_local_interface_ip4([byte(), ...]) -> nonempty_string() | {error, timeout | integer()}.
+
+-spec add_local_interface_ip4([byte(), ...]) -> nonempty_string() | {error, _}.
 add_local_interface_ip4(Ip) ->
   case ip4_is_in_use(Ip) of
     {true, _} -> {error, ip_already_in_use};
     false -> 
       Interface = get_unused_local_adapter(),
-      Port = open_port({spawn, "sudo ifconfig " ++ Interface ++ " " ++ Ip ++ " netmask 255.255.255.0"}, []),
-      case read_port(Port) of
-        ok -> Interface;
-        {error, timeout} ->
-          case interface_exists(Interface) of
-            true -> Interface;
-            false -> {error, timeout}
-          end;
-        {error, Code} -> {error, Code}
+      case os:cmd("sudo ifconfig " ++ Interface ++ " " ++ Ip ++ " netmask 255.255.255.255") of
+        [] -> Interface;
+        Error -> {error, Error}
       end
   end.
 
@@ -26,41 +26,50 @@ ensure_local_interface_ip4(IpOrAdapter) ->
   case catch(ip4_is_in_use(IpOrAdapter)) of
     {true, Adapter} -> 
       Ips = proplists:get_value(Adapter, get_adapters_and_ips()),
-      log(Ips),
       {Ips, Adapter};
     _ -> 
       case interface_exists(IpOrAdapter) of
         true ->
-          Ips = proplists:get_value(IpOrAdapter, get_adapters_and_ips()), 
-          log(Ips),
+          Ips = proplists:get_value(IpOrAdapter, get_adapters_and_ips()),
           {Ips, IpOrAdapter};
         false -> false
       end
   end. 
 
+%There is probably a better queue to use, but htb seems the most straightforward that gives me the options I want.
+-spec initialize_traffic_control() -> ok | {error, _}.
+initialize_traffic_control() ->
+  try
+    [] = os:cmd("sudo tc qdisc add dev lo handle 1: root htb"),
+    [] = os:cmd("sudo tc class add dev lo parent 1: classid 1:1 htb rate 1000Mbps"),
+    ok
+  catch _:Reason ->
+    log(<<"Unable to create root qdisc and add class. Ensure running with sudo privs, and that no root qdisc exists on lo (run damocles_lib:teardown_traffic_control().)">>),
+    {error, Reason}
+  end.
 
--spec teardown_local_interface_ip4(string()) -> ok | {error, timeout | integer()}.
+-spec teardown_local_interface_ip4(nonempty_string()) -> ok | {error, string()}.
 teardown_local_interface_ip4(Interface) -> 
-  Port = open_port({spawn, "sudo ifconfig " ++ Interface ++ " down"}, []),
-  case read_port(Port) of
-    ok -> ok;
-    {error, timeout} ->
-      case interface_exists(Interface) of
-        true -> {error, timeout};
-        false -> ok
-      end;
-    {error, Code} -> {error, Code}
+  Resp = os:cmd("sudo ifconfig " ++ Interface ++ " down"),
+  %The response doesn't matter in the success case; so long as it's gone all is well.
+  case interface_exists(Interface) of 
+    true -> {error, Resp};
+    false -> ok
   end.
 
--spec read_port(Port::port()) -> ok | {error, timeout | integer()}.
-read_port(Port) ->
-  receive
-    {Port, {exit_status, 0}} -> ok;
-    {Port, {exit_status, Status}} -> {error, Status};
-    {Port, {data, Data}} -> log(Data), read_port(Port);
-    _ -> read_port(Port)
-  after 1000 -> {error, timeout}
+-spec teardown_traffic_control() -> ok | {error, _}.
+teardown_traffic_control() ->
+  try
+    [] = os:cmd("sudo tc qdisc del dev lo root"),
+    ok
+  catch _:Reason ->
+    log("Failed to tear down root qdisc on interface lo; exiting, but user intervention may be required for future startup"),
+    {error, Reason}
   end.
+
+-spec ping(nonempty_string(), nonempty_string()) -> string().
+ping(From, To) ->
+  os:cmd("ping -w 1 -I " ++ From ++ " " ++ To).
 
 -spec get_unused_local_adapter() -> nonempty_string().
 get_unused_local_adapter() ->
