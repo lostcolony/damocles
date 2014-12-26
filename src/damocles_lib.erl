@@ -1,15 +1,15 @@
 -module(damocles_lib).
 
--export([ensure_local_interface_ip4/1, teardown_local_interface_ip4/1]).
+-export([add_local_interface_ip4/1, teardown_local_interface_ip4/1]).
+-compile(export_all).
 
-
--spec ensure_local_interface_ip4([byte(), ...]) -> nonempty_string() | {error, timeout | integer()}.
-ensure_local_interface_ip4(Ip) ->
+-spec add_local_interface_ip4([byte(), ...]) -> nonempty_string() | {error, timeout | integer()}.
+add_local_interface_ip4(Ip) ->
   case ip4_is_in_use(Ip) of
     {true, _} -> {error, ip_already_in_use};
     false -> 
       Interface = get_unused_local_adapter(),
-      Port = open_port({spawn, "sudo ifconfig " ++ Interface ++ " " ++ Ip ++ " netmask 255.255.255.255"}, []),
+      Port = open_port({spawn, "sudo ifconfig " ++ Interface ++ " " ++ Ip ++ " netmask 255.255.255.0"}, []),
       case read_port(Port) of
         ok -> Interface;
         {error, timeout} ->
@@ -20,6 +20,24 @@ ensure_local_interface_ip4(Ip) ->
         {error, Code} -> {error, Code}
       end
   end.
+
+-spec ensure_local_interface_ip4(nonempty_string()) -> {nonempty_string(), nonempty_string()} | false.
+ensure_local_interface_ip4(IpOrAdapter) ->
+  case catch(ip4_is_in_use(IpOrAdapter)) of
+    {true, Adapter} -> 
+      Ips = proplists:get_value(Adapter, get_adapters_and_ips()),
+      log(Ips),
+      {Ips, Adapter};
+    _ -> 
+      case interface_exists(IpOrAdapter) of
+        true ->
+          Ips = proplists:get_value(IpOrAdapter, get_adapters_and_ips()), 
+          log(Ips),
+          {Ips, IpOrAdapter};
+        false -> false
+      end
+  end. 
+
 
 -spec teardown_local_interface_ip4(string()) -> ok | {error, timeout | integer()}.
 teardown_local_interface_ip4(Interface) -> 
@@ -56,8 +74,7 @@ get_unused_local_adapter() ->
 
 -spec ip4_is_in_use(nonempty_string()) -> false | {true, nonempty_string()}.
 ip4_is_in_use(Ip) ->
-  IpAsTuple = list_to_tuple([binary_to_integer(Part) || Part <- binary:split(list_to_binary(Ip), <<".">>, [global])]),
-  Adapter = proplists:get_value(IpAsTuple, lists:flatten([ [{X, Adapter} || X <- Ips] || {Adapter, Ips} <- get_adapters_and_ips()])),
+  Adapter = proplists:get_value(Ip, lists:flatten([ [{X, Adapter} || X <- Ips] || {Adapter, Ips} <- get_adapters_and_ips()])),
   case Adapter of
     undefined -> false;
     _ -> {true, Adapter}
@@ -72,8 +89,15 @@ get_adapters_and_ips() ->
   {ok, Items} = inet:getifaddrs(),
   [{Name, get_ip4s_from_props(Props)} || {Name, Props} <- Items].
 
--spec get_ip4s_from_props([{_, _}]) -> [tuple()].
-get_ip4s_from_props(Props) -> [Ip || {addr, Ip} <- Props, size(Ip) == 4].
+-spec get_ip4s_from_props([{_, _}]) -> [nonempty_string()].
+get_ip4s_from_props(Props) -> [ip4_tuple_as_list(Ip) || {addr, Ip} <- Props, size(Ip) == 4].
+
+ip4_tuple_as_list({A, B, C, D}) ->
+  integer_to_list(A) ++ "." ++
+  integer_to_list(B) ++ "." ++
+  integer_to_list(C) ++ "." ++
+  integer_to_list(D).
+
 
 log(Data) ->
   log("~p~n", [Data]).
