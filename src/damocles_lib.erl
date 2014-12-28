@@ -6,7 +6,11 @@
   ensure_local_interface_ip4/1, 
   teardown_local_interface_ip4/1,
   teardown_traffic_control/0, 
-  ping/2]).
+  add_class_filter_for_ips/3, 
+  delete_class_filter/1,
+  ping/2,  
+  log/1,
+  log/2]).
 
 
 -spec add_local_interface_ip4([byte(), ...]) -> nonempty_string() | {error, _}.
@@ -42,6 +46,7 @@ initialize_traffic_control() ->
   try
     [] = os:cmd("sudo tc qdisc add dev lo handle 1: root htb"),
     [] = os:cmd("sudo tc class add dev lo parent 1: classid 1:1 htb rate 1000Mbps"),
+    [] = os:cmd("sudo tc filter add dev lo parent 1: protocol ip pref 1 u32"),
     ok
   catch _:Reason ->
     log(<<"Unable to create root qdisc and add class. Ensure running with sudo privs, and that no root qdisc exists on lo (run damocles_lib:teardown_traffic_control().)">>),
@@ -70,6 +75,32 @@ teardown_traffic_control() ->
 -spec ping(nonempty_string(), nonempty_string()) -> string().
 ping(From, To) ->
   os:cmd("ping -w 1 -I " ++ From ++ " " ++ To).
+
+-spec add_class_filter_for_ips(nonempty_string(), nonempty_string(), integer()) -> ok | error.
+add_class_filter_for_ips(Src, Dst, Handle) -> 
+  try 
+    Ex1 = "sudo tc class add dev lo parent 1:1 classid 1:" ++ integer_to_list(Handle) ++ " htb rate 10Mbps ",
+    log(Ex1),
+    [] = os:cmd(Ex1),
+    Ex2 = "sudo tc filter add dev lo parent 1: handle ::" ++ integer_to_list(Handle) ++ " protocol ip prior 1 u32 match ip src " ++ Src ++ 
+      " match ip dst " ++ Dst ++ " flowid 1:" ++ integer_to_list(Handle),
+    log(Ex2),
+    [] = os:cmd(Ex2),
+    ok
+  catch _:_ ->
+    log("Failed to create class and filter for ~p to ~p on handle ~p", [Src, Dst, Handle]),
+    error
+  end.
+
+-spec delete_class_filter(integer()) -> ok | {error, nonempty_string()}.
+delete_class_filter(Handle) -> 
+  RespOdd = os:cmd("sudo tc filter del dev lo parent 1: handle 800::" ++ integer_to_list(Handle) ++ " prior 1 protocol ip u32"),
+  Resp = os:cmd("sudo tc class del dev lo parent 1:1 classid 1:" ++ integer_to_list(Handle) ++ " htb rate 100Mbps "),
+  case Resp of
+    [] -> ok;
+    Resp -> log(RespOdd), log(Resp), {error, Resp}
+  end.
+
 
 -spec get_unused_local_adapter() -> nonempty_string().
 get_unused_local_adapter() ->

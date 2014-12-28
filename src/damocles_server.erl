@@ -4,8 +4,9 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, code_change/3, terminate/2]).
 
--record(state, {interfaces = ordsets:new()}).
+-record(state, {interfaces = ordsets:new(), currentHandle=10, ipsToHandles = dict:new()}).
 -record(interface, {name, ip, transient=true}).
+
 
 init(_) ->
   %If we can't create traffic control, die. Die hard. With a vengeance. 
@@ -20,14 +21,27 @@ handle_call({add_interface, Ip}, _, State) ->
     {error, Reason} -> {reply, {error, Reason}, State};
     Interface ->
       OldInterfaces = State#state.interfaces, 
-      {reply, Interface, State#state{interfaces = ordsets:add_element(#interface{name = Interface, ip = Ip}, OldInterfaces)}}
+      case add_handles_for_interface(Ip, State) of
+        error -> 
+          ok = damocles_lib:teardown_local_interface_ip4(Interface),
+          {reply, error, State};
+        {NewHandle, NewDict} ->
+          {reply, Interface, #state{interfaces = ordsets:add_element(#interface{name = Interface, ip = Ip}, OldInterfaces), currentHandle = NewHandle, ipsToHandles = NewDict}}
+      end
   end;
 handle_call({ensure_interface, IpOrAdapter}, _, State) ->
   case damocles_lib:ensure_local_interface_ip4(IpOrAdapter) of
-    false -> {reply, false, State};
+    false -> 
+      {reply, false, State};
     {Ip, Interface} -> 
       OldInterfaces = State#state.interfaces, 
-      {reply, Interface, State#state{interfaces = ordsets:add_element(#interface{name = Interface, ip = Ip, transient = false}, OldInterfaces)}}
+      case add_handles_for_interface(Ip, State) of
+        error -> 
+          ok = damocles_lib:teardown_local_interface_ip4(Interface),
+          {reply, error, State};
+        {NewHandle, NewDict} ->
+          {reply, Interface, #state{interfaces = ordsets:add_element(#interface{name = Interface, ip = Ip}, OldInterfaces), currentHandle = NewHandle, ipsToHandles = NewDict}}
+      end
   end;
 handle_call(_,_, State) -> {reply, ok, State}.
 
@@ -43,3 +57,31 @@ terminate(_Reason, State) ->
   _ = rpc:pmap({damocles_lib, teardown_local_interface_ip4}, [], [Name || #interface{name = Name, transient = true}<- ordsets:to_list(State#state.interfaces)]), 
   _ = damocles_lib:teardown_traffic_control(),
   {ok, []}.
+
+
+-spec add_handles_for_interface(nonempty_string(), #state{}) -> {integer(), dict:dict({nonempty_string(), nonempty_string()}, integer())} | error.
+add_handles_for_interface(Ip, #state{currentHandle = CurrentHandle, ipsToHandles = HandleDict, interfaces = Interfaces}) ->
+  OtherIps = [ X#interface.ip || X <- Interfaces],
+  case lists:member(Ip, OtherIps) of
+    true -> {CurrentHandle, HandleDict};
+    false -> 
+      lists:foldl(
+        fun
+          (_, error) -> error;
+          (OtherIp, {Handle, Dict}) ->
+          damocles_lib:log("ALL: ~p, ~p, ~p", [OtherIp, Handle, Dict]),
+          try
+            ok = damocles_lib:add_class_filter_for_ips(Ip, OtherIp, Handle),
+            ok = damocles_lib:add_class_filter_for_ips(OtherIp, Ip, Handle+1),
+            NewDict = dict:store({Ip, OtherIp}, Handle, dict:store({OtherIp, Ip}, Handle+1, Dict)),
+            {Handle+2, NewDict}
+          catch _:Reason ->
+            damocles_lib:log("Failed to create class filters between ~p and ~p because ~p", [Ip, OtherIp, Reason]),
+            lists:foreach(
+              fun(H) ->
+                damocles_lib:delete_class_filter(H) %Just delete every item we created in this fold.
+              end, lists:seq(CurrentHandle, Handle+1)),
+            error
+          end
+        end, {CurrentHandle, HandleDict}, OtherIps)
+  end.
