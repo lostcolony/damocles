@@ -8,9 +8,15 @@
   teardown_traffic_control/0, 
   add_class_filter_for_ips/3, 
   delete_class_filter/1,
+  build_packet_rules/1,
+  set_packet_rules/2,
+  delete_packet_rules/1,
   ping/2,  
   log/1,
   log/2]).
+
+-type tc_rules() :: [{drop, integer() | float()} | {delay, integer()}].
+-export_type([tc_rules/0]).
 
 
 -spec add_local_interface_ip4([byte(), ...]) -> nonempty_string() | {error, _}.
@@ -80,11 +86,9 @@ ping(From, To) ->
 add_class_filter_for_ips(Src, Dst, Handle) -> 
   try 
     Ex1 = "sudo tc class add dev lo parent 1:1 classid 1:" ++ integer_to_list(Handle) ++ " htb rate 10Mbps ",
-    log(Ex1),
     [] = os:cmd(Ex1),
     Ex2 = "sudo tc filter add dev lo parent 1: handle ::" ++ integer_to_list(Handle) ++ " protocol ip prior 1 u32 match ip src " ++ Src ++ 
       " match ip dst " ++ Dst ++ " flowid 1:" ++ integer_to_list(Handle),
-    log(Ex2),
     [] = os:cmd(Ex2),
     ok
   catch _:_ ->
@@ -99,6 +103,45 @@ delete_class_filter(Handle) ->
   case Resp of
     [] -> ok;
     Resp -> log(RespOdd), log(Resp), {error, Resp}
+  end.
+
+-spec build_packet_rules(tc_rules()) -> string().
+build_packet_rules(List) ->
+  "netem " ++
+  lists:flatten(lists:map(
+    fun
+      ({drop, Percentage}) when is_integer(Percentage) ->
+        " drop " ++ integer_to_list(Percentage) ++ "% ";
+      ({drop, Percentage}) when is_float(Percentage) ->
+        io_lib:format(" drop ~.2f% ", [Percentage*100]);
+      ({delay, MS}) -> 
+        " delay " ++ integer_to_list(MS) ++ "ms "
+    end, List)).
+
+-spec set_packet_rules(integer(), string() | tc_rules()) -> ok | {error, any()}.
+set_packet_rules(Handle, [H | _] = Rules) when is_tuple(H) -> set_packet_rules(Handle, build_packet_rules(Rules));
+set_packet_rules(Handle, Rules) ->
+  BaseCommand = "sudo tc qdisc ~s dev lo parent 1:" ++ integer_to_list(Handle) ++ " handle " ++ integer_to_list(Handle) ++ ": " ++ Rules,
+  try
+    case os:cmd(io_lib:format(BaseCommand, ["add"])) of
+      [] -> ok;
+      Error -> 
+        case os:cmd(io_lib:format(BaseCommand, ["change"])) of
+          [] -> ok;
+          "RTNETLINK answers: No such file or directory" -> {error, Error};
+          Error2 -> {error, Error2} %
+        end
+    end
+  catch _:Reason ->
+    log("Failed to add packet rules for ~p~n", [Handle]),
+    {error, Reason}
+  end. 
+
+delete_packet_rules(Handle) ->
+  case catch(os:cmd("sudo tc qdisc del dev lo parent 1:" ++ integer_to_list(Handle) ++ " handle " ++ integer_to_list(Handle))) of
+    [] -> ok;
+    "RTNETLINK answers: Invalid argument" -> ok; %Already gone/never existed.
+    Error -> {error, Error}
   end.
 
 
