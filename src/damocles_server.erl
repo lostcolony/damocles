@@ -32,8 +32,8 @@ handle_call({add_interface, Ip}, _, State) ->
           {reply, Interface, #state{interfaces = ordsets:add_element(#interface{name = Interface, ip = Ip}, OldInterfaces), currentHandle = NewHandle, ipsToHandles = NewDict}}
       end
   end;
-handle_call({ensure_interface, IpOrAdapter}, _, State) ->
-  case damocles_lib:ensure_local_interface_ip4(IpOrAdapter) of
+handle_call({register_interface, IpOrAdapter}, _, State) ->
+  case damocles_lib:register_local_interface_ip4(IpOrAdapter) of
     false -> 
       {reply, false, State};
     {Ip, Interface} -> 

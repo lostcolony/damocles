@@ -3,7 +3,7 @@
 -export([
   initialize_traffic_control/0,
   add_local_interface_ip4/1, 
-  ensure_local_interface_ip4/1, 
+  register_local_interface_ip4/1, 
   teardown_local_interface_ip4/1,
   teardown_traffic_control/0, 
   add_class_filter_for_ips/3, 
@@ -31,8 +31,8 @@ add_local_interface_ip4(Ip) ->
       end
   end.
 
--spec ensure_local_interface_ip4(nonempty_string()) -> {nonempty_string(), nonempty_string()} | false.
-ensure_local_interface_ip4(IpOrAdapter) ->
+-spec register_local_interface_ip4(nonempty_string()) -> {nonempty_string(), nonempty_string()} | false.
+register_local_interface_ip4(IpOrAdapter) ->
   case catch(ip4_is_in_use(IpOrAdapter)) of
     {true, Adapter} -> 
       Ips = proplists:get_value(Adapter, get_adapters_and_ips()),
