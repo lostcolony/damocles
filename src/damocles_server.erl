@@ -19,6 +19,7 @@ init(_) ->
   process_flag(trap_exit, true),
   {ok, #state{}}.
 
+-spec handle_call(_, _, #state{}) -> {reply, _, #state{}}.
 handle_call({add_interface, Ip}, _, State) ->
   case damocles_lib:add_local_interface_ip4(Ip) of
     {error, Reason} -> {reply, {error, Reason}, State};
@@ -53,14 +54,76 @@ handle_call({get_rules_for_connection, IpOrAdapter1, IpOrAdapter2}, _, State = #
     {ok, #handle{rules = Rules}} -> {reply, Rules, State};
     _ -> {reply, undefined, State}
   end;
+handle_call({isolate_between_interfaces, SetA, SetB}, _, State) ->
+  server_apply_rule_between_nodesets(SetA, SetB, [{drop, 100}], State);
 handle_call({isolate_interface, IpOrAdapter}, _, State) ->
-  {[MatchingInterface], Others} = partition_interfaces(IpOrAdapter, State#state.interfaces),
-  {SuccessOrFailure, NewDict} = apply_rule_to_all_node_connections(MatchingInterface, Others, [{drop, 100}], State#state.ipsToHandles),
-  {reply, SuccessOrFailure, State#state{ipsToHandles = NewDict}};
+  server_apply_rule_to_all_connections_to_interface(IpOrAdapter, [{drop, 100}], State);
+handle_call({isolate_one_way, Src, Dst}, _, State) ->
+  server_apply_rule_one_way(Src, Dst, [{drop, 100}], State);
+handle_call({packet_loss_one_way, Src, Dst, DropRate}, _, State) ->
+  case check_drop_rate(DropRate) of
+    ok -> server_apply_rule_one_way(Src, Dst, [{drop, DropRate}], State);
+    A -> {reply, A, State}
+  end;
+handle_call({packet_loss_interface, IpOrAdapter, DropRate}, _, State) ->
+  case check_drop_rate(DropRate) of
+    ok -> server_apply_rule_to_all_connections_to_interface(IpOrAdapter, [{drop, DropRate}], State);
+    A -> {reply, A, State}
+  end;
+handle_call({packet_loss_between_interfaces, SetA, SetB, DropRate}, _, State) ->
+  case check_drop_rate(DropRate) of
+    ok -> server_apply_rule_between_nodesets(SetA, SetB, [{drop, DropRate}], State);
+    A -> {reply, A, State}
+  end;
+handle_call({packet_loss_global, DropRate}, _, State) ->
+  case check_drop_rate(DropRate) of
+    ok -> server_apply_rule_globally([{drop, DropRate}], State);
+    A -> {reply, A, State}
+  end;
+handle_call({delay_one_way, Src, Dst, Amount}, _, State) ->
+  server_apply_rule_one_way(Src, Dst, [{delay, Amount}], State);
+handle_call({delay_interface, IpOrAdapter, Amount}, _, State) ->
+  server_apply_rule_to_all_connections_to_interface(IpOrAdapter, [{delay, Amount}], State);
+handle_call({delay_between_interfaces, SetA, SetB, Amount}, _, State) ->
+  server_apply_rule_between_nodesets(SetA, SetB, [{delay, Amount}], State);
+handle_call({delay_global, Amount}, _, State) ->
+  server_apply_rule_globally([{delay, Amount}], State);
+handle_call({restore_one_way, Src, Dst}, _, State = #state{interfaces = Interfaces, ipsToHandles = Dict}) ->
+  SrcIp = (get_interface_for_ip_or_adapter(Src, Interfaces))#interface.ip,
+  DstIp =  (get_interface_for_ip_or_adapter(Dst, Interfaces))#interface.ip,
+  Handle = dict:fetch({SrcIp, DstIp},Dict),
+  case damocles_lib:delete_packet_rules(Handle#handle.id) of
+    ok -> 
+      NewState = State#state{ipsToHandles = dict:store({SrcIp, DstIp}, Handle#handle{rules = []}, Dict)},
+      {reply, ok, NewState};
+    {error, Reason} -> 
+      damocles_lib:log("Failed to remove rules for ~p -> ~p: ~p", [SrcIp, DstIp, Reason]),
+      {reply, error, State}
+  end;
 handle_call({restore_interface, IpOrAdapter}, _, State) ->
   {[MatchingInterface], Others} = partition_interfaces(IpOrAdapter, State#state.interfaces),
-  {SuccessOrFailure, NewDict} = remove_all_rules_for_node_connections(MatchingInterface, Others, State#state.ipsToHandles),
-  {reply, SuccessOrFailure, State#state{ipsToHandles = NewDict}};  
+  Ip = MatchingInterface#interface.ip,
+  OtherIps = [X#interface.ip || X <- Others],
+  case remove_all_rules_between_node_and_nodesets(Ip, OtherIps, State#state.ipsToHandles) of
+    {ok, NewDict} ->
+      {reply, ok, State#state{ipsToHandles = NewDict}}; 
+    {error, Failed, NewDict} ->
+      {reply, {error, Failed}, State#state{ipsToHandles = NewDict}}
+  end;
+handle_call(restore_all_interfaces, _, State) ->
+  InterfaceSets =  interface_sets([X#interface.ip || X <- ordsets:to_list(State#state.interfaces)]), 
+  {Failed, NewIpHandleDict} = 
+    lists:foldl(
+      fun({Ip, OtherIps}, {FailedAcc, Dict}) ->
+        case remove_all_rules_between_node_and_nodesets(Ip, OtherIps, Dict) of
+          {ok, NewDict} -> {FailedAcc, NewDict};
+          {error, NewFails, NewDict} -> {NewFails ++ FailedAcc, NewDict}
+        end
+      end, {[], State#state.ipsToHandles}, InterfaceSets),
+  case Failed of
+    [] -> {reply, ok, State#state{ipsToHandles = NewIpHandleDict}};
+    _ -> {reply, {error, Failed}, State#state{ipsToHandles = NewIpHandleDict}}
+  end; 
 handle_call(_,_, State) -> {reply, ok, State}.
 
 handle_cast(stop, State) -> {stop, normal, State};
@@ -76,6 +139,10 @@ terminate(_Reason, State) ->
   _ = damocles_lib:teardown_traffic_control(),
   {ok, []}.
 
+check_drop_rate(DropRate) when is_integer(DropRate) andalso (DropRate < 0 orelse DropRate > 100) -> {error, invalid_drop_rate};
+check_drop_rate(DropRate) when is_float(DropRate) andalso (DropRate < 0.0 orelse DropRate > 1.0) -> {error, invalid_drop_rate};
+check_drop_rate(_) -> ok.
+
 get_interface_for_ip_or_adapter(IpOrAdapter, Interfaces) ->
   List = ordsets:to_list(Interfaces),
   case [X || X <- List, X#interface.ip == IpOrAdapter orelse X#interface.name == IpOrAdapter] of
@@ -89,6 +156,7 @@ partition_interfaces(IpOrAdapter, Interfaces) ->
     fun(Interface) ->
       Interface#interface.ip == IpOrAdapter orelse Interface#interface.name == IpOrAdapter
     end, List).
+
 
 -spec add_handles_for_interface(nonempty_string(), #state{}) -> {integer(), dict:dict({nonempty_string(), nonempty_string()}, #handle{})} | error.
 add_handles_for_interface(Ip, #state{currentHandle = CurrentHandle, ipsToHandles = HandleDict, interfaces = Interfaces}) ->
@@ -116,21 +184,77 @@ add_handles_for_interface(Ip, #state{currentHandle = CurrentHandle, ipsToHandles
         end, {CurrentHandle, HandleDict}, OtherIps)
   end.
 
--spec remove_all_rules_for_node_connections(#interface{}, [#interface{}], ip_to_handle_dict()) -> {ok, ip_to_handle_dict()} | {error, [{nonempty_string(), nonempty_string()}], ip_to_handle_dict()}. 
-remove_all_rules_for_node_connections(#interface{ip = IpOfNode}, OtherInterfaces, HandleDict) ->
-  IpHandleSets =  lists:flatten([ [{IpOfNode, Interface#interface.ip, dict:fetch({IpOfNode, Interface#interface.ip}, HandleDict)}, {Interface#interface.ip, IpOfNode, dict:fetch({Interface#interface.ip, IpOfNode}, HandleDict)}] || Interface <- OtherInterfaces]),
+%Will either apply the stated rules to all connections between known interfaces, clear all rules on 
+%connections between known interfaces, or throw due to being in an inconsistent state.
+server_apply_rule_globally(Rules, State) ->
+  InterfaceSets =  interface_sets([X#interface.ip || X <- ordsets:to_list(State#state.interfaces)]), 
+  {Failed, NewIpHandleDict} = 
+    lists:foldl(
+      fun
+        (_, {error, NewDict}) -> {error, NewDict};
+        ({Ip, OtherIps}, {ok, Dict}) ->
+          case apply_rule_between_node_and_nodesets(Ip, OtherIps, Rules, Dict) of
+            {ok, NewDict} -> {ok, NewDict};
+            {error, NewDict} -> {error, NewDict}
+          end
+      end, {ok, State#state.ipsToHandles}, InterfaceSets),
+  case Failed of
+    ok -> {reply, ok, State#state{ipsToHandles = NewIpHandleDict}};
+    error -> 
+      {_, ok, NewState} = handle_call(restore_all_interfaces, undefined, State),
+      {reply, error, NewState}
+  end.
+
+server_apply_rule_one_way(Src, Dst, Rules, State = #state{interfaces = Interfaces, ipsToHandles = HandleDict}) ->
+  SrcIp = (get_interface_for_ip_or_adapter(Src, Interfaces))#interface.ip,
+  DstIp =  (get_interface_for_ip_or_adapter(Dst, Interfaces))#interface.ip,
+  {ok, Handle} = dict:find({SrcIp, DstIp}, HandleDict),
+  case add_rules_to_handle(SrcIp, DstIp, Handle, Rules, HandleDict) of
+    error -> {reply, error, State};
+    {ok, NewDict} -> {reply, ok, State#state{ipsToHandles = NewDict}}
+  end.
+
+server_apply_rule_to_all_connections_to_interface(IpOrAdapter, Rules, State) ->
+  {[MatchingInterface], Others} = partition_interfaces(IpOrAdapter, State#state.interfaces),
+  Ip = MatchingInterface#interface.ip,
+  OtherIps = [X#interface.ip || X <- Others],
+  {SuccessOrFailure, NewDict} = apply_rule_between_node_and_nodesets(Ip, OtherIps, Rules, State#state.ipsToHandles),
+  {reply, SuccessOrFailure, State#state{ipsToHandles = NewDict}}.
+
+% Handles both nodesets, and individual interfaces. 
+server_apply_rule_between_nodesets(SetA = [H | _], SetB, Rules, State) when is_integer(H) -> 
+  server_apply_rule_between_nodesets([SetA], SetB, Rules, State);
+server_apply_rule_between_nodesets(SetA, SetB = [H | _], Rules, State) when is_integer(H) -> 
+  server_apply_rule_between_nodesets(SetA, [SetB], Rules, State);
+server_apply_rule_between_nodesets(SetARaw, SetBRaw, Rules, State) ->
+  SetA = [(get_interface_for_ip_or_adapter(X, State#state.interfaces))#interface.ip || X <- SetARaw],
+  SetB = [(get_interface_for_ip_or_adapter(X, State#state.interfaces))#interface.ip || X <- SetBRaw],
+  {SuccessOrFailure, NewDict} = apply_rule_between_nodeset_and_nodeset(SetA, SetB, Rules, State#state.ipsToHandles),
+  {reply, SuccessOrFailure, State#state{ipsToHandles = NewDict}}.
+
+% Either all connections between the two nodesets have the rule applied, or all connections
+% are restored to normal, or, it throws, process dies.
+apply_rule_between_nodeset_and_nodeset(NodesA, NodesB, Rules, HandleDict) ->
   Result = 
     lists:foldl(
       fun
-        ({Ip1, Ip2, Handle}, {Acc, AccDict}) ->
-          case damocles_lib:delete_packet_rules(Handle#handle.id) of
-            ok -> {Acc, dict:store({Ip1, Ip2}, Handle#handle{rules = []}, AccDict)};
-            {error, Reason} -> damocles_lib:log("Failed to remove rules for ~p -> ~p: ~p", [Ip1, Ip2, Reason]), {[{Ip1, Ip2} | Acc], AccDict}
+        (_, error) -> error;
+        (Node, {ok, Dict}) ->
+          case apply_rule_between_node_and_nodesets(Node, NodesB, Rules, Dict) of
+            {ok, NewDict} -> {ok, NewDict};
+            {error, _} -> error
           end
-      end, {[], HandleDict}, IpHandleSets),
+      end, {ok, HandleDict}, NodesA),
   case Result of
-    {[], NewDict} -> {ok, NewDict};
-    {Failed, NewDict} -> {error, Failed, NewDict}
+    {ok, NewDict} -> {ok, NewDict};
+    error ->
+      NewDict = 
+        lists:foldl(
+          fun(Node, Dict) ->
+            {ok, NewDict} = remove_all_rules_between_node_and_nodesets(Node, NodesA, Dict),
+            NewDict
+          end, HandleDict, NodesA),
+      {error, NewDict}
   end.
 
 %Calling this should guarantee one of three things about the connections to/from the specified IP.
@@ -140,33 +264,52 @@ remove_all_rules_for_node_connections(#interface{ip = IpOfNode}, OtherInterfaces
 %    may have had the rule applied, and others have whatever they had prior to this function being called. This is bad. 
 %    An exception will be thrown in such a case, causing the process to restart, and in doing so attempt to tear down and 
 %    replace all interface configuration.
--spec apply_rule_to_all_node_connections(#interface{}, [#interface{}], damocles_lib:tc_rules(), ip_to_handle_dict()) -> {ok | error, ip_to_handle_dict()}.
-apply_rule_to_all_node_connections(#interface{ip = IpOfNode} = InterfaceOfNode, OtherInterfaces, Rules, HandleDict) ->
-  IpHandleSets =  lists:flatten([ [{IpOfNode, Interface#interface.ip, dict:fetch({IpOfNode, Interface#interface.ip}, HandleDict)}, {Interface#interface.ip, IpOfNode, dict:fetch({Interface#interface.ip, IpOfNode}, HandleDict)}] || Interface <- OtherInterfaces]),
+apply_rule_between_node_and_nodesets(NodeIp, NodeIpSet, Rules, HandleDict) ->
+  IpHandleSets = lists:flatten([ [{NodeIp, X, dict:fetch({NodeIp, X}, HandleDict) }, {X, NodeIp,  dict:fetch({X, NodeIp}, HandleDict)}] || X <-NodeIpSet, X /= NodeIp ]),
   Result = 
     lists:foldl(
       fun
         (_, error) -> error;
-        ({Ip1, Ip2, Handle}, ok) ->
-          case damocles_lib:set_packet_rules(Handle#handle.id, Rules) of
-            ok -> ok;
-            {error, Reason} ->  
-              damocles_lib:log("Failed to apply rule for ~p -> ~p: ~p", [Ip1, Ip2, Reason]), 
-              error
-          end
-      end, ok, IpHandleSets),
+        ({Ip1, Ip2, Handle}, {ok, Dict}) -> add_rules_to_handle(Ip1, Ip2, Handle, Rules, Dict)
+      end, {ok, HandleDict}, IpHandleSets),
   case Result of
     error ->
-      {ok, NewDict} = remove_all_rules_for_node_connections(InterfaceOfNode, OtherInterfaces, HandleDict),
+      {ok, NewDict} = remove_all_rules_between_node_and_nodesets(NodeIp, NodeIpSet, HandleDict),
       {error, NewDict}; %We return error to indicate we failed, and the new dictionary shows there are no rules being applied to the connections.
-    ok -> %All worked; just need to update the dictionary for each entry to the new rule
-      Return = 
-        lists:foldl(
-          fun({Ip1, Ip2, Handle}, Dict) ->
-            dict:store({Ip1, Ip2}, Handle#handle{rules = Rules}, Dict)
-          end, HandleDict, IpHandleSets),
-      {ok, Return}
+    {ok, NewDict} -> 
+      {ok, NewDict}
+  end.
+
+add_rules_to_handle(Ip1, Ip2, Handle, Rules, Dict) ->
+  case damocles_lib:set_packet_rules(Handle#handle.id, Rules ++ Handle#handle.rules) of
+    ok -> {ok, dict:store({Ip1, Ip2}, Handle#handle{rules = (Rules ++ Handle#handle.rules)}, Dict)};
+    {error, Reason} ->  
+      damocles_lib:log("Failed to apply rule for ~p -> ~p: ~p", [Ip1, Ip2, Reason]), 
+      error
+  end.
+
+remove_all_rules_between_node_and_nodesets(NodeIp, NodeIpSet, HandleDict) ->
+  IpHandleSets = lists:flatten([ [{NodeIp, X, dict:fetch({NodeIp, X}, HandleDict) }, {X, NodeIp,  dict:fetch({X, NodeIp}, HandleDict)}] || X <-NodeIpSet ]),
+  Result = 
+    lists:foldl(
+      fun
+        ({Ip1, Ip2, Handle}, {Acc, AccDict}) ->
+          case Handle#handle.rules of
+            [] -> {Acc, AccDict};
+            _ ->
+              case damocles_lib:delete_packet_rules(Handle#handle.id) of
+                ok -> {Acc, dict:store({Ip1, Ip2}, Handle#handle{rules = []}, AccDict)};
+                {error, Reason} -> damocles_lib:log("Failed to remove rules for ~p -> ~p: ~p", [Ip1, Ip2, Reason]), {[{Ip1, Ip2} | Acc], AccDict}
+              end
+            end
+      end, {[], HandleDict}, IpHandleSets),
+  case Result of
+    {[], NewDict} -> {ok, NewDict};
+    {Failed, NewDict} -> {error, Failed, NewDict}
   end.
 
 
 
+interface_sets([_]) -> [];
+interface_sets([H | T]) when T /= []->
+  [{H, T}] ++ interface_sets(T).

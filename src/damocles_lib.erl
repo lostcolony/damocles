@@ -11,6 +11,8 @@
   build_packet_rules/1,
   set_packet_rules/2,
   delete_packet_rules/1,
+  show_all_local_filters/0,
+  show_all_local_rules/0,
   ping/2,  
   log/1,
   log/2]).
@@ -110,13 +112,14 @@ build_packet_rules(List) ->
   "netem " ++
   lists:flatten(lists:map(
     fun
-      ({drop, Percentage}) when is_integer(Percentage) ->
-        " drop " ++ integer_to_list(Percentage) ++ "% ";
-      ({drop, Percentage}) when is_float(Percentage) ->
-        io_lib:format(" drop ~.2f% ", [Percentage*100]);
+      ({drop, Percentage}) ->
+        " drop " ++ percentage_to_list(Percentage) ++ "% ";
       ({delay, MS}) -> 
         " delay " ++ integer_to_list(MS) ++ "ms "
     end, List)).
+
+percentage_to_list(Percentage) when is_integer(Percentage) -> integer_to_list(Percentage);
+percentage_to_list(Percentage) when is_float(Percentage) -> io_lib:format("~.2f", [Percentage*100]).
 
 -spec set_packet_rules(integer(), string() | tc_rules()) -> ok | {error, any()}.
 set_packet_rules(Handle, [H | _] = Rules) when is_tuple(H) -> set_packet_rules(Handle, build_packet_rules(Rules));
@@ -144,6 +147,9 @@ delete_packet_rules(Handle) ->
     Error -> {error, Error}
   end.
 
+show_all_local_filters() -> os:cmd("sudo tc filter show dev lo").
+
+show_all_local_rules() -> os:cmd("sudo tc qdisc show dev lo").
 
 -spec get_unused_local_adapter() -> nonempty_string().
 get_unused_local_adapter() ->
