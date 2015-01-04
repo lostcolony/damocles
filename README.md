@@ -195,7 +195,7 @@ From the command line:
 ```
 
 ##### Induce packet delay between a src IP and dst IP
-Similar to preventing traffic between the two (and overwrites it), this causes a fixed delay to be imposed on packets between the src IP and the dst IP, and not the reverse. The delay is an integer in milliseconds.
+Similar to preventing traffic between the two, this causes a fixed delay to be imposed on packets between the src IP and the dst IP, and not the reverse. The delay is an integer in milliseconds.
 
 From Erlang:
 ```
