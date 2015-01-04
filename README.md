@@ -102,7 +102,7 @@ From the command line:
 
 
 ##### Prevent traffic from a source IP (10.10.10.10) to a destination IP (10.10.10.11)
-Prevent all traffic flowing out from source to destination, but no traffic flowing the other direction.
+Prevent all traffic flowing out from source to destination, but not traffic flowing the other direction.
 
 From Erlang:
 ```
