@@ -321,7 +321,8 @@ From the command line:
 - Add bandwidth limitations. Possibly some difficulty, but low priority.
 - Add additional mechanisms for delaying/dropping in different patterns. Easy but low priority.
 - Refactor some things. Very low priority, but a cause of enough joy it might happen.
-
+- Add OSX support. Probably very hard (not sure the domain mapping for traffic control is the same, nor what utilities OSX comes with), moderate priority.
+ 
 ## License
 ----
 
