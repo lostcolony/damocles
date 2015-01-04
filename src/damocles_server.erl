@@ -281,8 +281,14 @@ apply_rule_between_node_and_nodesets(NodeIp, NodeIpSet, Rules, HandleDict) ->
   end.
 
 add_rules_to_handle(Ip1, Ip2, Handle, Rules, Dict) ->
-  case damocles_lib:set_packet_rules(Handle#handle.id, Rules ++ Handle#handle.rules) of
-    ok -> {ok, dict:store({Ip1, Ip2}, Handle#handle{rules = (Rules ++ Handle#handle.rules)}, Dict)};
+  NewRuleTypes = [element(1, Rule) || Rule <- Rules],
+  CurrentRules = 
+    lists:foldl(
+      fun(Type, List) ->
+        lists:keydelete(Type, 1, List)
+      end, Handle#handle.rules, NewRuleTypes), 
+  case damocles_lib:set_packet_rules(Handle#handle.id, Rules ++ CurrentRules) of
+    ok -> {ok, dict:store({Ip1, Ip2}, Handle#handle{rules = (Rules ++ CurrentRules)}, Dict)};
     {error, Reason} ->  
       damocles_lib:log("Failed to apply rule for ~p -> ~p: ~p", [Ip1, Ip2, Reason]), 
       error

@@ -6,7 +6,6 @@
 
 start_link() ->
   damocles_lib:teardown_traffic_control(),
-  damocles_lib:teardown_all_local_interface(),
 	supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 init([]) ->

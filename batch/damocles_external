@@ -13,6 +13,23 @@ main([Fun | Args]) ->
 process_args([]) -> [];
 process_args([Arg | Args]) ->
   case [string:strip(X) || X <- string:tokens(Arg, ",")] of
-    [A] -> [A] ++ process_args(Args);
+    [A] -> [to_num_if_needed(A)] ++ process_args(Args);
     List -> [List] ++ process_args(Args)
+  end.
+
+to_num_if_needed(A) -> to_integer_or_list(to_float_or_list(A)).
+  
+
+to_integer_or_list(A) ->
+  case catch(list_to_integer(A)) of
+    {'EXIT', _} -> A;
+    B when is_integer(B) -> B
+  end.
+
+to_float_or_list([$. | _] = Val) ->
+  to_float_or_list("0" ++ Val);
+to_float_or_list(A) ->
+  case catch(list_to_float(A)) of
+    {'EXIT', _} -> A;
+    B when is_float(B) -> B
   end.
