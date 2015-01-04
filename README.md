@@ -320,6 +320,7 @@ From the command line:
 - Allow for the registering of and manipulation of external IPs rather than local ones. Harder, but useful for load testing, so a higher priority when I next have free time.
 - Add bandwidth limitations. Possibly some difficulty, but low priority.
 - Add additional mechanisms for delaying/dropping in different patterns. Easy but low priority.
+- Refactor some things. Very low priority, but a cause of enough joy it might happen.
 
 ## License
 ----
