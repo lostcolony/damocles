@@ -38,13 +38,12 @@ add_local_interface_ip4(Ip) ->
 register_local_interface_ip4(IpOrAdapter) ->
   case catch(ip4_is_in_use(IpOrAdapter)) of
     {true, Adapter} -> 
-      Ips = proplists:get_value(Adapter, get_adapters_and_ips()),
-      {Ips, Adapter};
+      {IpOrAdapter, Adapter};
     _ -> 
       case interface_exists(IpOrAdapter) of
         true ->
           Ips = proplists:get_value(IpOrAdapter, get_adapters_and_ips()),
-          {Ips, IpOrAdapter};
+          {hd(Ips), IpOrAdapter};
         false -> false
       end
   end. 
