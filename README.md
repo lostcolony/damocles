@@ -87,17 +87,17 @@ From the command line:
 [location]/batch/damocles_external add_interface "10.10.10.14"
 ```
 
-##### Registering an existing local adapter with IP 10.10.10.10
+##### Registering an existing local adapter with its IP (10.10.10.15)
 Use an IP from an existing local adapter. These adapters will not be torn down when Damocles is stopped, but will have any rules you have applied to them torn down.
 
 From Erlang:
 ```
-damocles:add_interface("10.10.10.15").
+damocles:register_interface("10.10.10.15").
 ```
 
 From the command line:
 ```
-[location]/batch/damocles_external add_interface "10.10.10.15"
+[location]/batch/damocles_external register_interface "10.10.10.15"
 ```
 
 
