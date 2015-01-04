@@ -20,6 +20,8 @@ init(_) ->
   {ok, #state{}}.
 
 -spec handle_call(_, _, #state{}) -> {reply, _, #state{}}.
+handle_call(get_known_ips, _, State) ->
+  {reply, [X#interface.ip || X <- ordsets:to_list(State#state.interfaces)], State};
 handle_call({add_interface, Ip}, _, State) ->
   case damocles_lib:add_local_interface_ip4(Ip) of
     {error, Reason} -> {reply, {error, Reason}, State};

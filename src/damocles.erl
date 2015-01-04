@@ -3,6 +3,7 @@
 -export([
   start/0, 
   start_link/0, 
+  get_known_ips/0,
   add_interface/1, 
   register_interface/1,
   isolate_one_way/2, 
@@ -27,6 +28,8 @@
 start() -> gen_server:start({local, damocles_server}, damocles_server, [], []).
 
 start_link() -> gen_server:start_link({local, damocles_server}, damocles_server, [], []).
+
+get_known_ips() -> gen_server:call(damocles_server, get_known_ips).
 
 %Creates an interface that will be torn down when Damocles is stopped.
 -spec add_interface(nonempty_string()) -> nonempty_string() | error.
