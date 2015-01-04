@@ -315,6 +315,11 @@ From the command line:
 ```
 [location]/batch/damocles_external get_rules_for_connection 10.10.10.10 10.10.10.11
 ```
+#TODO
+- Bugfixes. Highest priority.
+- Allow for the registering of and manipulation of external IPs rather than local ones. Harder, but useful for load testing, so a higher priority when I next have free time.
+- Add bandwidth limitations. Possibly some difficulty, but low priority.
+- Add additional mechanisms for delaying/dropping in different patterns. Easy but low priority.
 
 ## License
 ----
