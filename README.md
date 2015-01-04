@@ -52,6 +52,10 @@ From the command line, you can execute any function using batch/damocles_externa
 - Also, both drop and delay rules may be applied separately and will persist until you have restored the node connection.
 - However, setting a new drop value to a connection will overwrite an existing drop value; same with delay overwriting an existing value.
 - All functions do one of three things. Return ok, return 'error' (which depending on the function called may mean nothing occurred, or, if it was a function that affected multiple connections, it means all the connections you referenced in the call have been reset), or throw. If an exception is thrown from within Damocles (as opposed to the RPC interface), and the process has restarted (if started as a command line application the supervisor is used), all interfaces and such we knew about have been torn down so that we're in a 'known' state; you will need to recreate/reregister them.
+- Things can go wrong! 
+  - First, since this requires sudo, you may have to get permissions set up properly.
+  - Running make while Damocles is running can lead to weirdness in the release. Easiest fix is to rm -rf the _rel folder, and then kill the app process (ps aux | grep beam).
+  - Since there is implicit OS state, and I'm not trying to wipe out anything at startup, only a clean shutdown, it may be you have portions of code you need to clean up. damocles_lib:teardown* functions are callable for the Erlang users; the command line users can run sudo erl -pa ebin from the Damocles folder to start up the Erlang shell, and from there run the teardown commands. It should not be necessary however; removal of prior traffic control constructs occurs on application startup (but not otherwise; restarting through the supervisor will not trigger it, as it should be cleaned up as part of the terminate).
 
 ##### Stopping
 From Erlang, stop the application if it was started that way, or call damocles:stop().
