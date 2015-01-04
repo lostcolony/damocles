@@ -5,6 +5,7 @@
   add_local_interface_ip4/1, 
   register_local_interface_ip4/1, 
   teardown_local_interface_ip4/1,
+  teardown_all_local_interface/0,
   teardown_traffic_control/0, 
   add_class_filter_for_ips/3, 
   delete_class_filter/1,
@@ -69,6 +70,13 @@ teardown_local_interface_ip4(Interface) ->
     true -> {error, Resp};
     false -> ok
   end.
+
+teardown_all_local_interface() ->
+  Ids = ["lo:" ++ Rest || {"lo:" ++ Rest, _} <- get_adapters_and_ips(), Rest /= ""],
+  lists:foreach(
+    fun(Id) ->
+      teardown_local_interface_ip4(Id)
+    end, Ids).
 
 -spec teardown_traffic_control() -> ok | {error, _}.
 teardown_traffic_control() ->

@@ -1,0 +1,18 @@
+#!/usr/bin/env escript
+%%! -name damocles_script@127.0.0.1 -setcookie damocles
+main([Mod, Fun | Args]) ->
+  try 
+    pong = net_adm:ping('damocles@127.0.0.1'),
+    io:format("~p~n", [rpc:call('damocles@127.0.0.1', list_to_atom(Mod), list_to_atom(Fun), process_args(Args))])
+  catch _:Reason ->
+    io:format("~p~n", [erlang:get_stacktrace()]),
+    io:format("~p~n", [Reason]),
+    exit(Reason)
+  end.
+
+process_args([]) -> [];
+process_args([Arg | Args]) ->
+  case [string:strip(X) || X <- string:tokens(Arg, ",")] of
+    [A] -> [A] ++ process_args(Args);
+    List -> [List] ++ process_args(Args)
+  end.
