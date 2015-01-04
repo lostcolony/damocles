@@ -49,9 +49,9 @@ From the command line, you can execute any function using batch/damocles_externa
 
 ###### MISC: Things to keep in mind
 - Rules may only be applied between IPs that have been added/registered with Damocles.
-- Also, both drop and delay rules may be applied separately and will persist until you have restored the node connection.
-- However, setting a new drop value to a connection will overwrite an existing drop value; same with delay overwriting an existing value.
-- All functions do one of three things. Return ok, return 'error' (which depending on the function called may mean nothing occurred, or, if it was a function that affected multiple connections, it means all the connections you referenced in the call have been reset), or throw. If an exception is thrown from within Damocles (as opposed to the RPC interface), and the process has restarted (if started as a command line application the supervisor is used), all interfaces and such we knew about have been torn down so that we're in a 'known' state; you will need to recreate/reregister them.
+- Both drop and delay rules may be applied separately and will persist until you have restored the node connection.
+- Setting a new drop value to a connection will overwrite an existing drop value; same with delay overwriting an existing value.
+- All functions that make changes return one of two things. Either ok, 'error' (which depending on the function called may mean nothing occurred, or, if it was a function that affected multiple connections, it means all the connections you referenced in the call have been reset), or they may throw. If an exception is thrown from within Damocles (as opposed to the RPC interface), and the process has restarted (if started as a command line application the supervisor is used), all interfaces and such we knew about have been torn down so that we're in a 'known' state; you will need to recreate/reregister them. Call get_known_ips to check and see if this has occurred, in the event of getting something other than ok or error.
 - Things can go wrong! 
   - First, since this requires sudo, you may have to get permissions set up properly.
   - Running make while Damocles is running can lead to weirdness in the release. Easiest fix is to rm -rf the _rel folder, and then kill the app process (ps aux | grep beam). Then make should work.
