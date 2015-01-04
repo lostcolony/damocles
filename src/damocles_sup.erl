@@ -5,7 +5,7 @@
 -export([init/1]).
 
 start_link() ->
-  damocles_lib:teardown_traffic_control(),
+  _ = damocles_lib:teardown_traffic_control(),
 	supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 init([]) ->
