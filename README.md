@@ -47,7 +47,7 @@ From the command line, you can execute any function using batch/damocles_externa
 [location]/batch/damocles_external add_interface "10.10.10.10"
 ```
 
-###### IMPORTANT: Things to keep in mind
+###### MISC: Things to keep in mind
 - Rules may only be applied between IPs that have been added/registered with Damocles.
 - Also, both drop and delay rules may be applied separately and will persist until you have restored the node connection.
 - However, setting a new drop value to a connection will overwrite an existing drop value; same with delay overwriting an existing value.
