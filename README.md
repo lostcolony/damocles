@@ -247,7 +247,7 @@ From the command line:
 ```
 
 ##### Restore a connection between a src IP and dst IP
-Will undo any delay/drop you've imposed between the two IPs (one way).
+Will undo any delay/drop you've imposed on traffic flowing from src, to dst (but not the other way).
 
 From Erlang:
 ```
