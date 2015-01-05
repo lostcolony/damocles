@@ -1,6 +1,6 @@
 # Damocles
 
-Damocles is an Erlang library intended to make writing and running distributed application tests easier. In this first release, it does this by creating local interfaces on a single machine and controlling the flow of packets between those packets, allowing it to run on any Linux (currently) machine without affecting other apps/traffic/etc. It also allows for distributed tests to be run easily in a continuous integration environment, without the need to spin up or allocate separate VMs for each application instance.
+Damocles is an Erlang library intended to make writing and running distributed application tests easier. In this first release, it does this by creating local interfaces on a single machine and controlling the flow of packets between those interfaces, allowing it to run on any Linux (currently) machine without affecting other apps/traffic/etc. It also allows for distributed tests to be run easily in a continuous integration environment, without the need to spin up or allocate separate VMs for each application instance.
 
 ## Requirements
 Damocles requires:
