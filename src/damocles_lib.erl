@@ -28,7 +28,9 @@ add_local_interface_ip4(Ip) ->
     {true, _} -> {error, ip_already_in_use};
     false -> 
       Interface = get_unused_local_adapter(),
-      case os:cmd("sudo ifconfig " ++ Interface ++ " " ++ Ip ++ " netmask 255.255.255.255") of
+      case os:cmd("sudo ip link add " ++ Interface ++ " type dummy;
+                   sudo ip link set dev " ++ Interface ++ " up;
+                   sudo ip addr add dev " ++ Interface ++ " " ++ Ip ++ "/32") of
         [] -> Interface;
         Error -> {error, Error}
       end
@@ -63,7 +65,7 @@ initialize_traffic_control() ->
 
 -spec teardown_local_interface_ip4(nonempty_string()) -> ok | {error, string()}.
 teardown_local_interface_ip4(Interface) -> 
-  Resp = os:cmd("sudo ifconfig " ++ Interface ++ " down"),
+  Resp = os:cmd("sudo ip link del dev " ++ Interface),
   %The response doesn't matter in the success case; so long as it's gone all is well.
   case interface_exists(Interface) of 
     true -> {error, Resp};
@@ -71,7 +73,7 @@ teardown_local_interface_ip4(Interface) ->
   end.
 
 teardown_all_local_interface() ->
-  Ids = ["lo:" ++ Rest || {"lo:" ++ Rest, _} <- get_adapters_and_ips(), Rest /= ""],
+  Ids = ["lo-" ++ Rest || {"lo-" ++ Rest, _} <- get_adapters_and_ips(), Rest /= ""],
   lists:foreach(
     fun(Id) ->
       teardown_local_interface_ip4(Id)
@@ -160,13 +162,13 @@ show_all_local_rules() -> os:cmd("sudo tc qdisc show dev lo").
 
 -spec get_unused_local_adapter() -> nonempty_string().
 get_unused_local_adapter() ->
-  Used = [list_to_integer(Rest) || {"lo:" ++ Rest, _} <- get_adapters_and_ips(), Rest /= ""],
+  Used = [list_to_integer(Rest) || {"lo-" ++ Rest, _} <- get_adapters_and_ips(), Rest /= ""],
   Number = 
     case length(Used) of
       0 -> 0;
       _ -> lists:max(Used) + 1
     end,
-  "lo:" ++ integer_to_list(Number).
+  "lo-" ++ integer_to_list(Number).
 
 -spec ip4_is_in_use(nonempty_string()) -> false | {true, nonempty_string()}.
 ip4_is_in_use(Ip) ->
