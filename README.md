@@ -35,16 +35,16 @@ From Erlang, you can start Damocles as an application, or call damocles:start() 
 
 For those wishing to use Damocles as a command line app, execute 
 ```
-[location]/batch/start.sh
+[location]/scripts/start.sh
 ```
 Note that this executes ifconfig and tc commands with sudo; you may need to run it with sudo if it fails.
 
 ##### Using Damocles 
 From Erlang, all commands exist in damocles.erl. A listing is below with examples
 
-From the command line, you can execute any function using batch/damocles_external, where the first argument is the function from damocles.erl you want to execute, and successive parameters are the arguments you wish to pass in. Lists can be expressed as comma separated strings (see examples).
+From the command line, you can execute any function using scripts/damocles_external, where the first argument is the function from damocles.erl you want to execute, and successive parameters are the arguments you wish to pass in. Lists can be expressed as comma separated strings (see examples).
 ```
-[location]/batch/damocles_external add_interface "10.10.10.10"
+[location]/scripts/damocles_external add_interface "10.10.10.10"
 ```
 
 ###### MISC: Things to keep in mind
@@ -62,7 +62,7 @@ From Erlang, stop the application if it was started that way, or call damocles:s
 
 From the command line, execute the stop script
 ```
-[location]/batch/stop.sh
+[location]/scripts/stop.sh
 ```
 
 ## Examples
@@ -80,11 +80,11 @@ damocles:add_interface("10.10.10.14").
 
 From the command line:
 ```
-[location]/batch/damocles_external add_interface "10.10.10.10"
-[location]/batch/damocles_external add_interface "10.10.10.11"
-[location]/batch/damocles_external add_interface "10.10.10.12"
-[location]/batch/damocles_external add_interface "10.10.10.13"
-[location]/batch/damocles_external add_interface "10.10.10.14"
+[location]/scripts/damocles_external add_interface "10.10.10.10"
+[location]/scripts/damocles_external add_interface "10.10.10.11"
+[location]/scripts/damocles_external add_interface "10.10.10.12"
+[location]/scripts/damocles_external add_interface "10.10.10.13"
+[location]/scripts/damocles_external add_interface "10.10.10.14"
 ```
 
 ##### Registering an existing local adapter with its IP (10.10.10.15)
@@ -97,7 +97,7 @@ damocles:register_interface("10.10.10.15").
 
 From the command line:
 ```
-[location]/batch/damocles_external register_interface "10.10.10.15"
+[location]/scripts/damocles_external register_interface "10.10.10.15"
 ```
 
 
@@ -111,7 +111,7 @@ damocles:isolate_one_way("10.10.10.10", "10.10.10.11").
 
 From the command line:
 ```
-[location]/batch/damocles_external isolate_one_way 10.10.10.10 10.10.10.11
+[location]/scripts/damocles_external isolate_one_way 10.10.10.10 10.10.10.11
 ```
 
 ##### Prevent all traffic to and from an interface 
@@ -124,7 +124,7 @@ damocles:isolate_interface("10.10.10.10").
 
 From the command line:
 ```
-[location]/batch/damocles_external isolate_interface 10.10.10.10
+[location]/scripts/damocles_external isolate_interface 10.10.10.10
 ```
 
 ##### Create node partitions
@@ -137,7 +137,7 @@ damocles:isolate_between_interfaces(["10.10.10.10", "10.10.10.11"], ["10.10.10.1
 
 From the command line:
 ```
-[location]/batch/damocles_external isolate_between_interfaces "10.10.10.10,10.10.10.11" "10.10.10.13,10.10.10.14"
+[location]/scripts/damocles_external isolate_between_interfaces "10.10.10.10,10.10.10.11" "10.10.10.13,10.10.10.14"
 ```
 
 ##### Induce packet loss between a src IP and dst IP
@@ -152,7 +152,7 @@ damocles:packet_loss_one_way("10.10.10.10", "10.10.10.11", 0.05).
 
 From the command line:
 ```
-[location]/batch/damocles_external packet_loss_one_way 10.10.10.10 10.10.10.11 .05
+[location]/scripts/damocles_external packet_loss_one_way 10.10.10.10 10.10.10.11 .05
 ```
 
 ##### Induce packet loss for all traffic flowing into or out of an interface
@@ -165,7 +165,7 @@ damocles:packet_loss_interface("10.10.10.10", 0.05).
 
 From the command line:
 ```
-[location]/batch/damocles_external packet_loss_interface 10.10.10.10 .05
+[location]/scripts/damocles_external packet_loss_interface 10.10.10.10 .05
 ```
 
 ##### Induce packet loss for all traffic between sets of interfaces
@@ -178,7 +178,7 @@ damocles:packet_loss_between_interfaces(["10.10.10.10", "10.10.10.11], ["10.10.1
 
 From the command line:
 ```
-[location]/batch/damocles_external packet_loss_between_interfaces "10.10.10.10,10.10.10.11" "10.10.10.13,10.10.10.14" .05
+[location]/scripts/damocles_external packet_loss_between_interfaces "10.10.10.10,10.10.10.11" "10.10.10.13,10.10.10.14" .05
 ```
 
 ##### Induce packet loss for all communication between known nodes
@@ -191,7 +191,7 @@ damocles:packet_loss_global(0.05).
 
 From the command line:
 ```
-[location]/batch/damocles_external packet_loss_global .05
+[location]/scripts/damocles_external packet_loss_global .05
 ```
 
 ##### Induce packet delay between a src IP and dst IP
@@ -204,7 +204,7 @@ damocles:delay_one_way("10.10.10.10", "10.10.10.11", 100).
 
 From the command line:
 ```
-[location]/batch/damocles_external delay_one_way 10.10.10.10 10.10.10.11 100
+[location]/scripts/damocles_external delay_one_way 10.10.10.10 10.10.10.11 100
 ```
 
 ##### Induce packet delay for all traffic flowing into or out of an interface
@@ -217,7 +217,7 @@ damocles:delay_interface("10.10.10.10", 100).
 
 From the command line:
 ```
-[location]/batch/damocles_external delay_interface 10.10.10.10 100
+[location]/scripts/damocles_external delay_interface 10.10.10.10 100
 ```
 
 ##### Induce packet delay for all traffic between sets of interfaces
@@ -230,7 +230,7 @@ damocles:delay_between_interfaces(["10.10.10.10", "10.10.10.11], ["10.10.10.13",
 
 From the command line:
 ```
-[location]/batch/damocles_external delay_between_interfaces "10.10.10.10,10.10.10.11" "10.10.10.13,10.10.10.14" 100
+[location]/scripts/damocles_external delay_between_interfaces "10.10.10.10,10.10.10.11" "10.10.10.13,10.10.10.14" 100
 ```
 
 ##### Induce packet delays for all packets sent between known interfaces
@@ -243,7 +243,7 @@ damocles:delay_global(100).
 
 From the command line:
 ```
-[location]/batch/damocles_external delay_global 100
+[location]/scripts/damocles_external delay_global 100
 ```
 
 ##### Restore a connection between a src IP and dst IP
@@ -256,7 +256,7 @@ damocles:restore_one_way("10.10.10.10", "10.10.10.11").
 
 From the command line:
 ```
-[location]/batch/damocles_external restore_one_way 10.10.10.10 10.10.10.11
+[location]/scripts/damocles_external restore_one_way 10.10.10.10 10.10.10.11
 ```
 
 
@@ -270,7 +270,7 @@ damocles:restore_interface("10.10.10.10").
 
 From the command line:
 ```
-[location]/batch/damocles_external restore_interface 10.10.10.10
+[location]/scripts/damocles_external restore_interface 10.10.10.10
 ```
 
 
@@ -284,7 +284,7 @@ damocles:restore_all_interfaces().
 
 From the command line:
 ```
-[location]/batch/damocles_external restore_all_interfaces
+[location]/scripts/damocles_external restore_all_interfaces
 ```
 
 ##### See what IPs Damocles currently is aware of
@@ -297,7 +297,7 @@ damocles:get_known_ips().
 
 From the command line:
 ```
-[location]/batch/damocles_external get_known_ips
+[location]/scripts/damocles_external get_known_ips
 ```
 
 
@@ -313,7 +313,7 @@ damocles:get_rules_for_connection("10.10.10.10", "10.10.10.11").
 
 From the command line:
 ```
-[location]/batch/damocles_external get_rules_for_connection 10.10.10.10 10.10.10.11
+[location]/scripts/damocles_external get_rules_for_connection 10.10.10.10 10.10.10.11
 ```
 #TODO
 - Bugfixes. Highest priority.
