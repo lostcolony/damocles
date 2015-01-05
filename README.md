@@ -55,7 +55,7 @@ From the command line, you can execute any function using batch/damocles_externa
 - Things can go wrong! 
   - First, since this requires sudo, you may have to get permissions set up properly.
   - Running make while Damocles is running can lead to weirdness in the release. Easiest fix is to rm -rf the _rel folder, and then kill the app process (ps aux | grep beam, to find the id easily). Then make should work.
-  - Since there is implicit OS state, and I'm not trying to wipe out anything at startup, relying instead on a clean shutdown, it may be you have portions of code you need to clean up. damocles_lib:teardown* functions are callable for the Erlang users; the command line users can run sudo erl -pa ebin from the Damocles folder to start up the Erlang shell, and from there run the teardown commands. It should not be necessary however; removal of prior traffic control constructs occurs on application startup (but not otherwise; restarting through the supervisor will not trigger it, as it should be cleaned up as part of the terminate).
+  - Since there is implicit OS state, and I'm not trying to wipe out anything at startup, relying instead on a clean shutdown, it may be you have portions of code you need to clean up. damocles_lib:teardown* functions are callable for the Erlang users; the command line users can run sudo erl -pa ebin from the Damocles folder to start up the Erlang shell, and from there run the teardown commands.
 
 ##### Stopping
 From Erlang, stop the application if it was started that way, or call damocles:stop().
