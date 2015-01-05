@@ -220,7 +220,7 @@ From the command line:
 [location]/batch/damocles_external delay_interface 10.10.10.10 100
 ```
 
-##### Induce packet loss for all traffic between sets of interfaces
+##### Induce packet delay for all traffic between sets of interfaces
 Similar to creating node partitions, this causes a delay for all traffic flowing between a node in the first set, to a node in the second set. Note that this applies both in and out, so a 100ms delay means that a send and acknowledgement will have a 100ms delay on the send, -and- a 100ms delay on the acknowledgement, for a total ping time of 200ms.
 
 From Erlang:
