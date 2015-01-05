@@ -10,7 +10,7 @@ Damocles requires:
     - has make
     - has sudo permissions for running the above for whatever user you run Damocles as.
     
-  - Erlang installed and on your path (tested on R17; but no use of R17 features means it can likely run on earlier versions). 
+  - Erlang installed and on your path (tested on R17; but no use of R17 features means it can likely run on earlier versions with minimal tweaking. Specs do rely on some R17 stuff). 
   
 ## Installation
 If using Damocles from an Erlang application, you can just add it to your test dependencies.
