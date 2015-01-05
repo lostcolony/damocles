@@ -46,7 +46,7 @@ handle_call({register_interface, IpOrAdapter}, _, State) ->
           ok = damocles_lib:teardown_local_interface_ip4(Interface),
           {reply, error, State};
         {NewHandle, NewDict} ->
-          {reply, Interface, #state{interfaces = ordsets:add_element(#interface{name = Interface, ip = Ip}, OldInterfaces), currentHandle = NewHandle, ipsToHandles = NewDict}}
+          {reply, Interface, #state{interfaces = ordsets:add_element(#interface{name = Interface, ip = Ip, transient=false}, OldInterfaces), currentHandle = NewHandle, ipsToHandles = NewDict}}
       end
   end;
 handle_call({get_rules_for_connection, IpOrAdapter1, IpOrAdapter2}, _, State = #state{interfaces = Interfaces, ipsToHandles = HandleDict}) ->
