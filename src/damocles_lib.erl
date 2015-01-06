@@ -1,10 +1,11 @@
 -module(damocles_lib).
 
 -export([
+  get_interface_func_type/0,
   initialize_traffic_control/0,
-  add_local_interface_ip4/1, 
+  add_local_interface_ip4/2, 
   register_local_interface_ip4/1, 
-  teardown_local_interface_ip4/1,
+  teardown_local_interface_ip4/2,
   teardown_all_local_interface/0,
   teardown_traffic_control/0, 
   add_class_filter_for_ips/3, 
@@ -21,16 +22,30 @@
 -type tc_rules() :: [{drop, integer() | float()} | {delay, integer()}].
 -export_type([tc_rules/0]).
 
+-spec get_interface_func_type() -> ip | ifconfig.
+get_interface_func_type() ->
+  case os:cmd("sudo ip -V") of
+    "ip utility" ++ _ -> ip;
+    _ -> ifconfig
+  end.
 
--spec add_local_interface_ip4([byte(), ...]) -> nonempty_string() | {error, _}.
-add_local_interface_ip4(Ip) ->
+
+-spec add_local_interface_ip4([byte(), ...], ip | ifconfig) -> nonempty_string() | {error, _}.
+add_local_interface_ip4(Ip, IfCommand) ->
   case ip4_is_in_use(Ip) of
     {true, _} -> {error, ip_already_in_use};
     false -> 
-      Interface = get_unused_local_adapter(),
-      case os:cmd("sudo ip link add " ++ Interface ++ " type dummy;
-                   sudo ip link set dev " ++ Interface ++ " up;
-                   sudo ip addr add dev " ++ Interface ++ " " ++ Ip ++ "/32") of
+      Interface = get_unused_local_adapter(IfCommand),
+      CreateResults = 
+        case IfCommand of
+          ip -> 
+            os:cmd("sudo ip link add " ++ Interface ++ " type dummy;
+                    sudo ip link set dev " ++ Interface ++ " up;
+                    sudo ip addr add dev " ++ Interface ++ " " ++ Ip ++ "/32");
+          ifconfig -> 
+            os:cmd("sudo ifconfig " ++ Interface ++ " " ++ Ip ++ " netmask 255.255.255.255")
+        end,
+      case CreateResults of
         [] -> Interface;
         Error -> {error, Error}
       end
@@ -63,9 +78,16 @@ initialize_traffic_control() ->
     {error, Reason}
   end.
 
--spec teardown_local_interface_ip4(nonempty_string()) -> ok | {error, string()}.
-teardown_local_interface_ip4(Interface) -> 
-  Resp = os:cmd("sudo ip link del dev " ++ Interface),
+-spec teardown_local_interface_ip4(nonempty_string(), ip | ifconfig) -> ok | {error, string()}.
+teardown_local_interface_ip4(Interface, IfCommand) ->
+
+  Resp =  
+    case IfCommand of
+      ip -> 
+        os:cmd("sudo ip link del dev " ++ Interface);
+      ifconfig -> 
+        os:cmd("sudo ifconfig " ++ Interface ++ " down")
+    end,
   %The response doesn't matter in the success case; so long as it's gone all is well.
   case interface_exists(Interface) of 
     true -> {error, Resp};
@@ -73,10 +95,11 @@ teardown_local_interface_ip4(Interface) ->
   end.
 
 teardown_all_local_interface() ->
-  Ids = ["lo-" ++ Rest || {"lo-" ++ Rest, _} <- get_adapters_and_ips(), Rest /= ""],
+  Ids = [{"lo" ++ [Char | Rest], Char} || {"lo" ++ [Char | Rest], _} <- get_adapters_and_ips(), Rest /= "" andalso (Char == $: orelse Char == $-)],
   lists:foreach(
-    fun(Id) ->
-      teardown_local_interface_ip4(Id)
+    fun
+      ({Id, $:}) -> teardown_local_interface_ip4(Id, ifconfig);
+      ({Id, $-}) -> teardown_local_interface_ip4(Id, ip)
     end, Ids).
 
 -spec teardown_traffic_control() -> ok | {error, _}.
@@ -84,9 +107,7 @@ teardown_traffic_control() ->
   try
     [] = os:cmd("sudo tc qdisc del dev lo root"),
     ok
-  catch _:Reason ->
-    log("Failed to tear down root qdisc on interface lo; exiting, but user intervention may be required for future startup"),
-    {error, Reason}
+  catch _:Reason -> {error, Reason}
   end.
 
 -spec ping(nonempty_string(), nonempty_string()) -> string().
@@ -160,9 +181,13 @@ show_all_local_filters() -> os:cmd("sudo tc filter show dev lo").
 
 show_all_local_rules() -> os:cmd("sudo tc qdisc show dev lo").
 
--spec get_unused_local_adapter() -> nonempty_string().
-get_unused_local_adapter() ->
-  Used = [list_to_integer(Rest) || {"lo-" ++ Rest, _} <- get_adapters_and_ips(), Rest /= ""],
+-spec get_unused_local_adapter(ip | ifconfig) -> nonempty_string().
+get_unused_local_adapter(IfCommand) ->
+  Used = 
+    case IfCommand of
+      ip -> [list_to_integer(Rest) || {"lo-" ++ Rest, _} <- get_adapters_and_ips(), Rest /= ""];
+      ifconfig -> [list_to_integer(Rest) || {"lo:" ++ Rest, _} <- get_adapters_and_ips(), Rest /= ""]
+    end,
   Number = 
     case length(Used) of
       0 -> 0;

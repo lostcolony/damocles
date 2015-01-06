@@ -6,7 +6,7 @@
 
 
 -record(handle, {id :: integer(), rules = [] :: damocles_lib:tc_rules()}).
--record(state, {interfaces = ordsets:new(), currentHandle=10, ipsToHandles = dict:new() :: ip_to_handle_dict()}).
+-record(state, {ifcommand = undefined, interfaces = ordsets:new(), currentHandle=10, ipsToHandles = dict:new() :: ip_to_handle_dict()}).
 -record(interface, {name :: string(), ip :: string(), transient=true}).
 
 -type ip_to_handle_dict() :: dict:dict({nonempty_string(), nonempty_string()}, #handle{}).
@@ -17,22 +17,22 @@ init(_) ->
 
   %At this point make sure if we're exiting due to a shutdown we trap it, so terminate is called, and we (attempt to) undo our system manipulations.
   process_flag(trap_exit, true),
-  {ok, #state{}}.
+  {ok, #state{ifcommand = damocles_lib:get_interface_func_type()}}.
 
 -spec handle_call(_, _, #state{}) -> {reply, _, #state{}}.
 handle_call(get_known_ips, _, State) ->
   {reply, [X#interface.ip || X <- ordsets:to_list(State#state.interfaces)], State};
 handle_call({add_interface, Ip}, _, State) ->
-  case damocles_lib:add_local_interface_ip4(Ip) of
+  case damocles_lib:add_local_interface_ip4(Ip, State#state.ifcommand) of
     {error, Reason} -> {reply, {error, Reason}, State};
     Interface ->
       OldInterfaces = State#state.interfaces, 
       case add_handles_for_interface(Ip, State) of
         error -> 
-          ok = damocles_lib:teardown_local_interface_ip4(Interface),
+          ok = damocles_lib:teardown_local_interface_ip4(Interface, State#state.ifcommand),
           {reply, error, State};
         {NewHandle, NewDict} ->
-          {reply, Interface, #state{interfaces = ordsets:add_element(#interface{name = Interface, ip = Ip}, OldInterfaces), currentHandle = NewHandle, ipsToHandles = NewDict}}
+          {reply, Interface, State#state{interfaces = ordsets:add_element(#interface{name = Interface, ip = Ip}, OldInterfaces), currentHandle = NewHandle, ipsToHandles = NewDict}}
       end
   end;
 handle_call({register_interface, IpOrAdapter}, _, State) ->
@@ -43,10 +43,10 @@ handle_call({register_interface, IpOrAdapter}, _, State) ->
       OldInterfaces = State#state.interfaces, 
       case add_handles_for_interface(Ip, State) of
         error -> 
-          ok = damocles_lib:teardown_local_interface_ip4(Interface),
+          ok = damocles_lib:teardown_local_interface_ip4(Interface, State#state.ifcommand),
           {reply, error, State};
         {NewHandle, NewDict} ->
-          {reply, Interface, #state{interfaces = ordsets:add_element(#interface{name = Interface, ip = Ip, transient=false}, OldInterfaces), currentHandle = NewHandle, ipsToHandles = NewDict}}
+          {reply, Interface, State#state{interfaces = ordsets:add_element(#interface{name = Interface, ip = Ip, transient=false}, OldInterfaces), currentHandle = NewHandle, ipsToHandles = NewDict}}
       end
   end;
 handle_call({get_rules_for_connection, IpOrAdapter1, IpOrAdapter2}, _, State = #state{interfaces = Interfaces, ipsToHandles = HandleDict}) ->
@@ -137,8 +137,11 @@ code_change(_, _, State) -> {ok, State}.
 
 terminate(_Reason, State) -> 
   %Attempts to tear down each interface we've created, in parallel
-  _ = rpc:pmap({damocles_lib, teardown_local_interface_ip4}, [], [Name || #interface{name = Name, transient = true}<- ordsets:to_list(State#state.interfaces)]), 
-  _ = damocles_lib:teardown_traffic_control(),
+  _ = rpc:pmap({damocles_lib, teardown_local_interface_ip4}, [State#state.ifcommand], [Name || #interface{name = Name, transient = true}<- ordsets:to_list(State#state.interfaces)]), 
+  case damocles_lib:teardown_traffic_control() of
+    ok -> ok;
+    {error, _} -> damocles_lib:log("Failed to tear down root qdisc on interface lo; exiting, but user intervention may be required for future startup")
+  end,
   {ok, []}.
 
 check_drop_rate(DropRate) when is_integer(DropRate) andalso (DropRate < 0 orelse DropRate > 100) -> {error, invalid_drop_rate};
