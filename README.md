@@ -5,7 +5,7 @@ Damocles is an Erlang library intended to make writing and running distributed a
 ## Requirements
 Damocles requires:
   - Running on a Linux (developed on Mint 17) that:
-    - uses 'ifconfig' to add/remove interfaces, and 'lo' is the local interface
+    - uses 'ip' if available, else 'ifconfig' to add/remove interfaces, and 'lo' is the local interface
     - has tc and netem.
     - has make
     - has sudo permissions for running the above for whatever user you run Damocles as.
@@ -55,7 +55,7 @@ From the command line, you can execute any function using scripts/damocles_exter
 - Things can go wrong! 
   - First, since this requires sudo, you may have to get permissions set up properly.
   - If you execute Damocles with sudo (easiest thing for the command line), some log folders get created, which get in the way of running make again. If you need to run make again, sudo rm -rf _rel should set you right.
-  - Since there is implicit OS state, and I'm not trying to wipe out anything at startup, relying instead on a clean shutdown, it may be you have portions of code you need to clean up. damocles_lib:teardown* functions are callable for the Erlang users; the command line users can run sudo erl -pa ebin from the Damocles folder to start up the Erlang shell, and from there run the teardown commands.
+  - Since there is implicit OS state, and I'm not clearing interfaces on startup (and clearing traffic control only on initial startup, not on supervisor restoarts), relying instead on a clean shutdown, it may be you end up with interfaces or traffic control settings left behind if a run ends abruptly (kill -9 or machine restart or something). damocles_lib:teardown* functions are callable for the Erlang users; the command line users can run sudo erl -pa ebin from the Damocles folder to start up the Erlang shell, and from there run the teardown commands.
 
 ##### Stopping
 From Erlang, stop the application if it was started that way, or call damocles:stop().
